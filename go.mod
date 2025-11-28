@@ -1,4 +1,4 @@
-module iainjp/aoc-golang
+module iain.fyi/aoc-golang
 
 go 1.25.4
 
