@@ -36,7 +36,7 @@ func main() {
 				Usage: "Fetch details for given AoC day",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					config := Config{Year: cmd.Int("year"), Day: cmd.Int("day")}
-					PullDetails(config)
+					FetchDetails(config)
 					return nil
 				},
 			},
