@@ -10,7 +10,12 @@ import (
 	colly "github.com/gocolly/colly/v2"
 )
 
-func FetchDetails(config Config) error {
+// should this take a list? then check for each before retrieving from web
+func FetchDetails(config *Config) error {
+	if config.Day == INT_DEFAULT {
+		panic("Scanning for missing days not yet implemented")
+	}
+
 	fmt.Printf("Pulling details for AoC %d Day %d ...\n", config.Year, config.Day)
 
 	url := getUrl(config.Year, config.Day)
@@ -32,7 +37,7 @@ func getUrl(year int, day int) string {
 
 func configureScraper() *colly.Collector {
 	c := colly.NewCollector(
-		colly.UserAgent("aoc-golang-bot"),
+		colly.UserAgent("github.com/iainjp/aoc-golang by iainpritchard92@gmail.com"),
 		colly.AllowedDomains("adventofcode.com"),
 		colly.MaxDepth(1),
 	)
