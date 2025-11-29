@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"time"
 
 	colly "github.com/gocolly/colly/v2"
@@ -24,11 +23,10 @@ func ConfigureScraper() *colly.Collector {
 	return c
 }
 
-func SetSessionCookie(scraper *colly.Collector) *colly.Collector {
+func CleanScraperWithCookieSet(app *App) *colly.Collector {
+	scraper := app.Scraper.Clone()
 	scraper.OnRequest(func(r *colly.Request) {
-		// TODO validate this exists
-		sessionCookie := os.Getenv("AOC_SESSION_COOKIE")
-		r.Headers.Set("Cookie", "session="+sessionCookie)
+		r.Headers.Set("Cookie", "session="+app.SessionCookie)
 	})
 
 	return scraper

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"path/filepath"
 
@@ -13,69 +14,33 @@ import (
 
 // should this take a list? then check for each before retrieving from web
 func (app *App) FetchDetails() error {
-	config := &app.Config
-
-	if config.Day == INT_DEFAULT {
+	if app.Config.Day == INT_DEFAULT {
 		panic("Scanning for missing days not yet implemented")
 	}
 
-	fmt.Printf("Pulling details for AoC %d Day %d ...\n", config.Year, config.Day)
+	fmt.Printf("Pulling details for AoC %d Day %d ...\n", app.Config.Year, app.Config.Day)
 
 	if err := WriteDescriptionFile(app); err != nil {
 		return err
+	} else {
+		fmt.Printf("Finished fetching %d day-%02d/description.md\n", app.Config.Year, app.Config.Day)
 	}
 
 	if err := WriteInputFile(app); err != nil {
 		return err
+	} else {
+		fmt.Printf("Finished fetching %d day-%02d/input.txt\n", app.Config.Year, app.Config.Day)
 	}
 
 	return nil
 }
 
 func WriteDescriptionFile(app *App) error {
-	config := &app.Config
-	url := fmt.Sprintf("https://adventofcode.com/%d/day/%d", config.Year, config.Day)
+	scraper := CleanScraperWithCookieSet(app)
+	url := fmt.Sprintf("https://adventofcode.com/%d/day/%d", app.Config.Year, app.Config.Day)
 
-	pageContent, err := getProblemSpec(url, app.Scraper)
-	if err != nil {
-		fmt.Printf("error retrieving problem spec: %d", err)
-		return err
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Printf("error retrieving input: %d", err)
-		return err
-	}
-
-	dir := filepath.Join(cwd, fmt.Sprintf("day-%02d", config.Day))
-	return WriteStringToFile(dir, "description.md", pageContent)
-}
-
-func WriteInputFile(app *App) error {
-	config := &app.Config
-	url := fmt.Sprintf("https://adventofcode.com/%d/day/%d/input", config.Year, config.Day)
-
-	inputFileContent, err := getInputFile(url, app.Scraper)
-	if err != nil {
-		return err
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	dir := filepath.Join(cwd, fmt.Sprintf("day-%02d", config.Day))
-	return WriteStringToFile(dir, "input.txt", inputFileContent)
-}
-
-func getProblemSpec(url string, scraper *colly.Collector) (string, error) {
-	var pageContent string
-
-	localScraper := SetSessionCookie(scraper.Clone())
-
-	localScraper.OnHTML("article", func(e *colly.HTMLElement) {
+	var contents []string
+	scraper.OnHTML("article", func(e *colly.HTMLElement) {
 		content, _ := e.DOM.First().Html()
 
 		markdown, err := htmltomarkdown.ConvertString(content)
@@ -83,31 +48,44 @@ func getProblemSpec(url string, scraper *colly.Collector) (string, error) {
 			log.Fatal(err)
 		}
 
-		pageContent = markdown
+		contents = append(contents, markdown)
 	})
 
-	err := localScraper.Visit(url)
+	err := scraper.Visit(url)
 	if err != nil {
-		return "", err
+		fmt.Printf("error getting problem spec at %s: %d", url, err)
+
+		return err
 	}
 
-	return pageContent, nil
+	joinedContent := strings.Join(contents, "\n\n\n")
+
+	return WriteStringToFile(getOutputDir(app), "description.md", joinedContent)
 }
 
-func getInputFile(url string, scraper *colly.Collector) (string, error) {
+func WriteInputFile(app *App) error {
+	scraper := CleanScraperWithCookieSet(app)
+	url := fmt.Sprintf("https://adventofcode.com/%d/day/%d/input", app.Config.Year, app.Config.Day)
+
 	var inputFileContents string
-
-	localScraper := SetSessionCookie(scraper.Clone())
-
-	localScraper.OnHTML("pre", func(e *colly.HTMLElement) {
-		println("Inside pre handler")
-		inputFileContents = e.Text
+	scraper.OnResponse(func(r *colly.Response) {
+		inputFileContents = string(r.Body)
 	})
 
-	err := localScraper.Visit(url)
+	err := scraper.Visit(url)
 	if err != nil {
-		return "", err
+		fmt.Printf("error getting input at %s: %d", url, err)
+		return err
 	}
 
-	return inputFileContents, nil
+	return WriteStringToFile(getOutputDir(app), "input.txt", inputFileContents)
+}
+
+func getOutputDir(app *App) string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return filepath.Join(cwd, fmt.Sprintf("day-%02d", app.Config.Day))
 }
