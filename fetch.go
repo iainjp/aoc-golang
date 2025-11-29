@@ -4,65 +4,78 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
+
+	"path/filepath"
 
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
 	colly "github.com/gocolly/colly/v2"
 )
 
 // should this take a list? then check for each before retrieving from web
-func FetchDetails(config *Config) error {
+func (app *App) FetchDetails() error {
+	config := &app.Config
+
 	if config.Day == INT_DEFAULT {
 		panic("Scanning for missing days not yet implemented")
 	}
 
 	fmt.Printf("Pulling details for AoC %d Day %d ...\n", config.Year, config.Day)
 
-	url := getUrl(config.Year, config.Day)
+	if err := WriteDescriptionFile(app); err != nil {
+		return err
+	}
 
-	fmt.Printf("URL: %s\n", url)
+	if err := WriteInputFile(app); err != nil {
+		return err
+	}
 
-	pageContent, err := getPage(url)
+	return nil
+}
+
+func WriteDescriptionFile(app *App) error {
+	config := &app.Config
+	url := fmt.Sprintf("https://adventofcode.com/%d/day/%d", config.Year, config.Day)
+
+	pageContent, err := getProblemSpec(url, app.Scraper)
+	if err != nil {
+		fmt.Printf("error retrieving problem spec: %d", err)
+		return err
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Printf("error retrieving input: %d", err)
+		return err
+	}
+
+	dir := filepath.Join(cwd, fmt.Sprintf("day-%02d", config.Day))
+	return WriteStringToFile(dir, "description.md", pageContent)
+}
+
+func WriteInputFile(app *App) error {
+	config := &app.Config
+	url := fmt.Sprintf("https://adventofcode.com/%d/day/%d/input", config.Year, config.Day)
+
+	inputFileContent, err := getInputFile(url, app.Scraper)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("Page Content:\n%s\n", pageContent)
-	return nil
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	dir := filepath.Join(cwd, fmt.Sprintf("day-%02d", config.Day))
+	return WriteStringToFile(dir, "input.txt", inputFileContent)
 }
 
-func getUrl(year int, day int) string {
-	return fmt.Sprintf("https://adventofcode.com/%d/day/%d", year, day)
-}
-
-func configureScraper() *colly.Collector {
-	c := colly.NewCollector(
-		colly.UserAgent("github.com/iainjp/aoc-golang by iainpritchard92@gmail.com"),
-		colly.AllowedDomains("adventofcode.com"),
-		colly.MaxDepth(1),
-	)
-
-	c.Limit(&colly.LimitRule{
-		DomainGlob:  "*adventofcode.com*",
-		Parallelism: 1,
-		Delay:       1 * time.Second,
-	})
-
-	c.OnRequest(func(r *colly.Request) {
-		// TODO validate this exists
-		sessionCookie := os.Getenv("AOC_SESSION_COOKIE")
-		r.Headers.Set("Cookie", "session="+sessionCookie)
-	})
-
-	return c
-}
-
-func getPage(url string) (string, error) {
-	c := configureScraper()
-
+func getProblemSpec(url string, scraper *colly.Collector) (string, error) {
 	var pageContent string
 
-	c.OnHTML("article", func(e *colly.HTMLElement) {
+	localScraper := SetSessionCookie(scraper.Clone())
+
+	localScraper.OnHTML("article", func(e *colly.HTMLElement) {
 		content, _ := e.DOM.First().Html()
 
 		markdown, err := htmltomarkdown.ConvertString(content)
@@ -73,10 +86,28 @@ func getPage(url string) (string, error) {
 		pageContent = markdown
 	})
 
-	err := c.Visit(url)
+	err := localScraper.Visit(url)
 	if err != nil {
 		return "", err
 	}
 
 	return pageContent, nil
+}
+
+func getInputFile(url string, scraper *colly.Collector) (string, error) {
+	var inputFileContents string
+
+	localScraper := SetSessionCookie(scraper.Clone())
+
+	localScraper.OnHTML("pre", func(e *colly.HTMLElement) {
+		println("Inside pre handler")
+		inputFileContents = e.Text
+	})
+
+	err := localScraper.Visit(url)
+	if err != nil {
+		return "", err
+	}
+
+	return inputFileContents, nil
 }

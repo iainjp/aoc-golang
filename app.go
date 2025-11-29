@@ -7,12 +7,18 @@ import (
 	"os"
 
 	yaml "github.com/goccy/go-yaml"
+	colly "github.com/gocolly/colly/v2"
 	"github.com/urfave/cli/v3"
 )
 
 type Config struct {
 	Year int
 	Day  int
+}
+
+type App struct {
+	Scraper *colly.Collector
+	Config  Config
 }
 
 const AOC_CONFIG_FILE = "aoc.yaml"
@@ -34,9 +40,12 @@ func main() {
 
 		Commands: []*cli.Command{
 			{
-				Name:   "fetch",
-				Usage:  "Fetch details for given AoC day",
-				Action: fetchAction,
+				Name:  "fetch",
+				Usage: "Fetch details for given AoC day",
+				Action: func(ctx context.Context, c *cli.Command) error {
+					app := configureApp(c)
+					return app.FetchDetails()
+				},
 			},
 		},
 	}
@@ -46,16 +55,26 @@ func main() {
 	}
 }
 
-const INT_DEFAULT = 0
+func configureApp(cmd *cli.Command) *App {
+	conf, err := buildConfig(cmd)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-// TODO extract validation logic
-func fetchAction(ctx context.Context, cmd *cli.Command) error {
+	return &App{
+		Scraper: ConfigureScraper(),
+		Config:  *conf,
+	}
+}
+
+func buildConfig(cmd *cli.Command) (*Config, error) {
 	passedYear := cmd.Int("year")
 	passedDay := cmd.Int("day")
 
 	fileConfig := getConfigFromFile()
 	if fileConfig.Year == INT_DEFAULT && passedYear == INT_DEFAULT {
-		return cli.Exit(fmt.Sprintf("Year must be provided via --year flag or %s config file", AOC_CONFIG_FILE), 1)
+		errMessage := fmt.Sprintf("Year must be provided via --year flag or %s config file", AOC_CONFIG_FILE)
+		return nil, cli.Exit(errMessage, 1)
 	}
 
 	if passedDay == INT_DEFAULT {
@@ -69,14 +88,13 @@ func fetchAction(ctx context.Context, cmd *cli.Command) error {
 		configuredYear = fileConfig.Year
 	}
 
-	config := &Config{
+	return &Config{
 		Year: configuredYear,
 		Day:  passedDay,
-	}
-
-	FetchDetails(config)
-	return nil
+	}, nil
 }
+
+const INT_DEFAULT = 0
 
 type ConfigFromFile struct {
 	Year int `yaml:"year"`
