@@ -120,6 +120,5 @@ func getConfigFromFile() *ConfigFromFile {
 		return nil
 	}
 
-	log.Default().Printf("Retrieved %s\n", f)
 	return &config
 }
