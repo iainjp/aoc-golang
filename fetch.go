@@ -4,12 +4,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
+	"time"
 
 	"path/filepath"
-
-	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
-	colly "github.com/gocolly/colly/v2"
 )
 
 type ScrapedDetails struct {
@@ -26,6 +23,8 @@ func (app *App) FetchDetails() error {
 }
 
 func fetchAllMissingDays(app *App) error {
+	throttle := time.Tick(2 * time.Second)
+
 	for day := 1; day <= 3; day++ {
 		if !inputFileExists(day) {
 			app.Config.Day = day
@@ -35,6 +34,7 @@ func fetchAllMissingDays(app *App) error {
 		} else {
 			log.Printf("Input file for Day %d already exists, skipping fetch.\n", day)
 		}
+		<-throttle
 	}
 	return nil
 }
@@ -60,48 +60,25 @@ func fetchSingleDay(app *App) error {
 	return nil
 }
 
-// too much conditionals here - split out
 func requestSingleDayDetails(app *App) (*ScrapedDetails, error) {
-	url := fmt.Sprintf("https://adventofcode.com/%d/day/%d", app.Config.Year, app.Config.Day)
-
-	// follow link to input file, if input file doesn't already exist
-	if !inputFileExists(app.Config.Day) {
-		app.Scraper.OnHTML("a[href]", func(h *colly.HTMLElement) {
-			link := h.Attr("href")
-			if link != "" && strings.Contains(link, `/input`) {
-				h.Request.Visit(link)
-			}
-		})
-	} else {
-		log.Printf("Input file for Day %d already exists, skipping input fetch.\n", app.Config.Day)
+	// fetch description regardless of existing file - to account for Day 2 update
+	description, err := app.Scraper.GetDescription(app.Config.Year, app.Config.Day)
+	if err != nil {
+		return nil, err
 	}
-
-	var detailSections []string
-	app.Scraper.OnHTML("body main article", func(e *colly.HTMLElement) {
-		content, _ := e.DOM.First().Html()
-
-		markdown, err := htmltomarkdown.ConvertString(content)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		detailSections = append(detailSections, markdown)
-	})
 
 	var inputFileContents string
 
+	// only refetch input if not already present
 	if !inputFileExists(app.Config.Day) {
-		app.Scraper.OnResponse(func(r *colly.Response) {
-			fmt.Printf("Visited: %s\n", r.Request.URL.String())
-			if strings.Contains(r.Request.URL.String(), "/input") {
-				inputFileContents = string(r.Body)
-			}
-		})
+		inputFileContents, err = app.Scraper.GetInput(app.Config.Year, app.Config.Day)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	err := app.Scraper.Visit(url)
 	return &ScrapedDetails{
-		Description: strings.Join(detailSections, "\n\n\n"),
+		Description: description,
 		Input:       inputFileContents,
 	}, err
 }

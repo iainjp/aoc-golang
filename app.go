@@ -7,7 +7,6 @@ import (
 	"os"
 
 	yaml "github.com/goccy/go-yaml"
-	colly "github.com/gocolly/colly/v2"
 	"github.com/urfave/cli/v3"
 )
 
@@ -18,7 +17,7 @@ type Config struct {
 
 type App struct {
 	Config  Config
-	Scraper *colly.Collector
+	Scraper *Scraper
 }
 
 const AOC_CONFIG_FILE = "aoc.yaml"
@@ -67,7 +66,7 @@ func configureApp(cmd *cli.Command) *App {
 	}
 
 	return &App{
-		Scraper: ConfigureScraper(sessionCookie),
+		Scraper: NewScraper(sessionCookie),
 		Config:  *conf,
 	}
 }
