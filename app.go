@@ -17,9 +17,8 @@ type Config struct {
 }
 
 type App struct {
-	Config        Config
-	SessionCookie string
-	Scraper       *colly.Collector
+	Config  Config
+	Scraper *colly.Collector
 }
 
 const AOC_CONFIG_FILE = "aoc.yaml"
@@ -64,13 +63,12 @@ func configureApp(cmd *cli.Command) *App {
 
 	sessionCookie := os.Getenv("AOC_SESSION_COOKIE")
 	if sessionCookie == "" {
-		log.Fatal("AOC_SESSION_COOKIE environment variable not set")
+		log.Fatal("AOC_SESSION_COOKIE environment variable is required and not set")
 	}
 
 	return &App{
-		Scraper:       ConfigureScraper(),
-		Config:        *conf,
-		SessionCookie: sessionCookie,
+		Scraper: ConfigureScraper(sessionCookie),
+		Config:  *conf,
 	}
 }
 
